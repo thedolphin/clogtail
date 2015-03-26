@@ -1,0 +1,12 @@
+
+simple and fast log tailer in pure c
+
+first time it remembers file size as offset and produces no output
+
+every next time it prints all data from last offset to the end of file
+
+if file was rotated (recreated) it tries to search by specified glob for previous file and dumps it from last known offset to the end, then dumps new file.
+
+Usage:
+
+clogtail <filename> [glob]
