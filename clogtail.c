@@ -27,9 +27,9 @@ void fassert(int res, char *message) {
 
 int main (int argc, char *argv[]) {
 
-    unsigned char *buf, *input_fn, *offset_fn, *offset_suffix = OFFSETEXT;
+    char *buf, *input_fn, *offset_fn, *offset_suffix = OFFSETEXT;
     struct stat input_stat, search_stat;
-    int no_offset_file, search_for_rotated_file;
+    int offset_file_exists, search_for_rotated_file;
     offset_t offset_data;
     glob_t glob_data;
     ssize_t rd, wr;
@@ -52,12 +52,12 @@ int main (int argc, char *argv[]) {
     res = fstat(input_fd, &input_stat);
     fassert(res, "file stat");
 
-    no_offset_file = access(offset_fn, F_OK | R_OK | W_OK );
+    offset_file_exists = access(offset_fn, F_OK | R_OK | W_OK );
 
     int offset_fd = open(offset_fn, O_RDWR | O_CREAT);
     fassert(offset_fd, "offset file open");
 
-    if (!no_offset_file) {
+    if (!offset_file_exists) {
 
         res = read(offset_fd, &offset_data, sizeof(offset_t));
         fassert(res, "offset file read");
@@ -104,7 +104,7 @@ int main (int argc, char *argv[]) {
                 }
 
             } else
-                fputs("warning, file rotated and no glob specified", stderr);
+                fputs("warning, file rotated and no glob specified\n", stderr);
 
             offset_data.inode = input_stat.st_ino;
             offset_data.offset = 0;
