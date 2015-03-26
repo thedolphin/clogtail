@@ -131,6 +131,7 @@ int main (int argc, char *argv[]) {
     }
 
     close(input_fd);
+    free(buf);
 
     offset_data.offset = input_stat.st_size;
     offset_data.inode = input_stat.st_ino;
