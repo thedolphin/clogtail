@@ -12,18 +12,13 @@
 #define OFFSETEXT ".offset"
 #define OFFSETSZ 7
 
+#define FASSERT(x, y) if ((x) == -1) { perror((y)); return 1; }
+
 typedef struct {
     off_t offset;
     off_t size;
     ino_t inode;
 } offset_t;
-
-void fassert(int res, char *message) {
-    if (res < 0) {
-        perror(message);
-        exit(1);
-    }
-}
 
 int main (int argc, char *argv[]) {
 
@@ -47,20 +42,20 @@ int main (int argc, char *argv[]) {
     strcat(offset_fn, offset_suffix);
 
     int input_fd = open(input_fn, O_RDONLY);
-    fassert(input_fd, "file open");
+    FASSERT(input_fd, "file open")
 
     res = fstat(input_fd, &input_stat);
-    fassert(res, "file stat");
+    FASSERT(res, "file stat");
 
     offset_file_exists = access(offset_fn, F_OK | R_OK | W_OK );
 
     int offset_fd = open(offset_fn, O_RDWR | O_CREAT);
-    fassert(offset_fd, "offset file open");
+    FASSERT(offset_fd, "offset file open");
 
     if (!offset_file_exists) {
 
         res = read(offset_fd, &offset_data, sizeof(offset_t));
-        fassert(res, "offset file read");
+        FASSERT(res, "offset file read");
 
         if (offset_data.offset == input_stat.st_size && offset_data.inode == input_stat.st_ino)
             return 0;
@@ -86,14 +81,14 @@ int main (int argc, char *argv[]) {
 
                 if (found) {
                     int globfd = open(glob_data.gl_pathv[i - 1], O_RDONLY);
-                    fassert(globfd, "found file open");
+                    FASSERT(globfd, "found file open");
 
                     res = lseek(globfd, offset_data.offset, SEEK_SET);
-                    fassert(res, "found file lseek");
+                    FASSERT(res, "found file lseek");
 
                     do {
                         rd = read(globfd, buf, BUFFERSIZE);
-                        fassert(rd, "found file read");
+                        FASSERT(rd, "found file read");
 
                         wr = write(STDOUT_FILENO, buf, rd);
 
@@ -116,13 +111,13 @@ int main (int argc, char *argv[]) {
                 offset_data.offset = 0;
             }
 
-            res = lseek(input_fd, offset_data.offset, SEEK_SET);
-            fassert(res, "lseek");
+            start = lseek(input_fd, offset_data.offset, SEEK_SET);
+            FASSERT(start, "lseek");
         }
 
         do {
             rd = read(input_fd, buf, BUFFERSIZE);
-            fassert(rd, "read");
+            FASSERT(rd, "read");
 
             wr = write(STDOUT_FILENO, buf, rd);
             offset_data.offset += rd;
