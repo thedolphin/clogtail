@@ -24,7 +24,7 @@ int main (int argc, char *argv[]) {
 
     char *buf, *input_fn, *offset_fn, *offset_suffix = OFFSETEXT;
     struct stat input_stat, search_stat;
-    int offset_file_exists, search_for_rotated_file;
+    int offset_file_exists;
     offset_t offset_data;
     glob_t glob_data;
     ssize_t rd, wr;
@@ -52,7 +52,7 @@ int main (int argc, char *argv[]) {
     int offset_fd = open(offset_fn, O_RDWR | O_CREAT);
     FASSERT(offset_fd, "offset file open");
 
-    if (!offset_file_exists) {
+    if (offset_file_exists == 0) {
 
         res = read(offset_fd, &offset_data, sizeof(offset_t));
         FASSERT(res, "offset file read");
@@ -70,7 +70,7 @@ int main (int argc, char *argv[]) {
 
             int i = 0, found = 0;
 
-            if (argc == 2) {
+            if (argc == 3) {
 
                 if (!glob(argv[2], GLOB_NOSORT, NULL, &glob_data))
                     for (i = 0, found = 0; i < glob_data.gl_pathc && !found; i++)
@@ -119,19 +119,24 @@ int main (int argc, char *argv[]) {
             rd = read(input_fd, buf, BUFFERSIZE);
             FASSERT(rd, "read");
 
-            wr = write(STDOUT_FILENO, buf, rd);
-            offset_data.offset += rd;
+            if (rd) {
+                wr = write(STDOUT_FILENO, buf, rd);
+                offset_data.offset += rd;
+            }
 
-        } while (rd == BUFFERSIZE);
+        } while (rd > 0);
 
         free(buf);
+
+    } else {
+
+        offset_data.offset = input_stat.st_size;
+        offset_data.inode = input_stat.st_ino;
+        offset_data.size = input_stat.st_size;
     }
 
     close(input_fd);
 
-    offset_data.offset = input_stat.st_size;
-    offset_data.inode = input_stat.st_ino;
-    offset_data.size = input_stat.st_size;
     lseek(offset_fd, 0, SEEK_SET);
     write(offset_fd, &offset_data, sizeof(offset_t));
     close(offset_fd);
