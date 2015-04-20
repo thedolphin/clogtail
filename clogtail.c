@@ -16,7 +16,6 @@
 
 typedef struct {
     off_t offset;
-    off_t size;
     ino_t inode;
 } offset_t;
 
@@ -52,13 +51,14 @@ int main (int argc, char *argv[]) {
     int offset_fd = open(offset_fn, O_RDWR | O_CREAT);
     FASSERT(offset_fd, "offset file open");
 
-    if (offset_file_exists == 0) {
+    if (offset_file_exists == 0) { // we found the ".offset" file
 
         res = read(offset_fd, &offset_data, sizeof(offset_t));
         FASSERT(res, "offset file read");
 
-        if (offset_data.offset == input_stat.st_size && offset_data.inode == input_stat.st_ino)
-            return 0;
+        if (offset_data.offset == input_stat.st_size &&
+            offset_data.inode == input_stat.st_ino) // no changes
+                return 0;
 
         buf = malloc(BUFFERSIZE);
         if (buf == NULL) {
@@ -66,14 +66,13 @@ int main (int argc, char *argv[]) {
             return 1;
         }
 
-        if (offset_data.inode != input_stat.st_ino) {
+        if (offset_data.inode != input_stat.st_ino) { // file rotated
 
-            int i = 0, found = 0;
+            if (argc == 3) { // we have glob to search for rotated file
 
-            if (argc == 3) {
-
+                int i, found = 0;
                 if (!glob(argv[2], GLOB_NOSORT, NULL, &glob_data))
-                    for (i = 0, found = 0; i < glob_data.gl_pathc && !found; i++)
+                    for (i = 0; i < glob_data.gl_pathc && !found; i++)
                         if(!stat(glob_data.gl_pathv[i], &search_stat))
                             found = (search_stat.st_ino == offset_data.inode);
 
@@ -86,17 +85,17 @@ int main (int argc, char *argv[]) {
                     res = lseek(globfd, offset_data.offset, SEEK_SET);
                     FASSERT(res, "found file lseek");
 
-                    do {
-                        rd = read(globfd, buf, BUFFERSIZE);
+                    while((rd = read(globfd, buf, BUFFERSIZE)) != 0) {
                         FASSERT(rd, "found file read");
-
                         wr = write(STDOUT_FILENO, buf, rd);
-
-                    } while (rd == BUFFERSIZE);
+                    }
 
                     close(globfd);
 
-                }
+                    fprintf(stderr, "file rotated, found at %s\n", glob_data.gl_pathv[i - 1]);
+
+                } else
+                    fputs("warning, file rotated and was not found\n", stderr);
 
             } else
                 fputs("warning, file rotated and no glob specified\n", stderr);
@@ -106,7 +105,7 @@ int main (int argc, char *argv[]) {
 
         } else {
 
-            if (offset_data.size > input_stat.st_size ) {
+            if (offset_data.offset > input_stat.st_size ) {
                 fputs("warning, truncated file\n", stderr);
                 offset_data.offset = 0;
             }
@@ -115,16 +114,11 @@ int main (int argc, char *argv[]) {
             FASSERT(start, "lseek");
         }
 
-        do {
-            rd = read(input_fd, buf, BUFFERSIZE);
+        while((rd = read(input_fd, buf, BUFFERSIZE)) != 0 ) {
             FASSERT(rd, "read");
-
-            if (rd) {
-                wr = write(STDOUT_FILENO, buf, rd);
-                offset_data.offset += rd;
-            }
-
-        } while (rd > 0);
+            wr = write(STDOUT_FILENO, buf, rd);
+            offset_data.offset += rd;
+        };
 
         free(buf);
 
@@ -132,7 +126,6 @@ int main (int argc, char *argv[]) {
 
         offset_data.offset = input_stat.st_size;
         offset_data.inode = input_stat.st_ino;
-        offset_data.size = input_stat.st_size;
     }
 
     close(input_fd);
