@@ -92,10 +92,11 @@ int main (int argc, char *argv[]) {
                     }
 
                     close(globfd);
-                    globfree(&glob_data);
 
                 } else
                     fputs("warning, file rotated and was not found\n", stderr);
+
+                globfree(&glob_data);
 
             } else
                 fputs("warning, file rotated and no glob specified\n", stderr);
