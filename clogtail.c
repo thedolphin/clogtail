@@ -76,9 +76,10 @@ int main (int argc, char *argv[]) {
                         if(!stat(glob_data.gl_pathv[i], &search_stat))
                             found = (search_stat.st_ino == offset_data.inode);
 
-                globfree(&glob_data);
-
                 if (found) {
+
+                    fprintf(stderr, "file rotated, found at %s\n", glob_data.gl_pathv[i - 1]);
+
                     int globfd = open(glob_data.gl_pathv[i - 1], O_RDONLY);
                     FASSERT(globfd, "found file open");
 
@@ -91,8 +92,7 @@ int main (int argc, char *argv[]) {
                     }
 
                     close(globfd);
-
-                    fprintf(stderr, "file rotated, found at %s\n", glob_data.gl_pathv[i - 1]);
+                    globfree(&glob_data);
 
                 } else
                     fputs("warning, file rotated and was not found\n", stderr);

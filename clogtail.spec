@@ -1,7 +1,7 @@
 %define source_repo https://github.com/thedolphin/clogtail.git
 
 Name:           clogtail
-Version:        0.1.2
+Version:        0.1.3
 Release:        1%{?dist}
 Summary:        log follower for periodic jobs
 Group:          Applications/File
