@@ -21,7 +21,7 @@ typedef struct {
 int main (int argc, char *argv[]) {
 
     char *buf;
-    struct stat input_stat, search_stat;
+    struct stat input_stat;
     int res;
     offset_t offset_data;
 
@@ -65,6 +65,7 @@ int main (int argc, char *argv[]) {
 
                 int i, found = 0;
                 glob_t glob_data;
+                struct stat search_stat;
 
                 if (!glob(argv[2], GLOB_NOSORT, NULL, &glob_data))
                     for (i = 0; i < glob_data.gl_pathc && !found; i++)
@@ -81,7 +82,7 @@ int main (int argc, char *argv[]) {
                     int globfd = open(glob_data.gl_pathv[i - 1], O_RDONLY);
                     FASSERT(globfd, "found file open")
 
-                    buf = mmap(NULL, buf_size, PROT_READ, MAP_NOCACHE | MAP_PRIVATE, globfd, offset_data.offset & page_align);
+                    buf = mmap(NULL, buf_size, PROT_READ, MAP_SHARED, globfd, offset_data.offset & page_align);
                     if (buf == MAP_FAILED) {
                         perror("mmap file");
                         return 1;
@@ -114,7 +115,7 @@ int main (int argc, char *argv[]) {
         }
 
         size_t buf_size = (input_stat.st_size - offset_data.offset + page_offset) & page_align;
-        buf = mmap(NULL, buf_size, PROT_READ, MAP_NOCACHE | MAP_PRIVATE, input_fd, offset_data.offset & page_align);
+        buf = mmap(NULL, buf_size, PROT_READ, MAP_SHARED, input_fd, offset_data.offset & page_align);
 
         if (buf == MAP_FAILED) {
             perror("cannot mmap file");
