@@ -25,9 +25,9 @@ int main (int argc, char *argv[]) {
     int res;
     offset_t offset_data;
 
-    unsigned long page_size = sysconf(_SC_PAGESIZE);
-    unsigned long page_offset = page_size - 1;
-    unsigned long page_align  = ~ page_offset;
+    long page_size = sysconf(_SC_PAGESIZE);
+    long page_offset = page_size - 1;
+    long page_align  = ~ page_offset;
 
     if (argc < 2) {
         printf("arguments required:\n\t- path to file (required)\n\t- glob to search for rotated file (optional)\n");
