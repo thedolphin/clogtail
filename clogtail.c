@@ -4,13 +4,12 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <glob.h>
 
-#define BUFFERSIZE 4096
 #define OFFSETEXT ".offset"
-#define OFFSETSZ 7
 
 #define FASSERT(x, y) if ((x) == -1) { perror((y)); return 1; }
 
@@ -21,56 +20,52 @@ typedef struct {
 
 int main (int argc, char *argv[]) {
 
-    char *buf, *input_fn, *offset_fn, *offset_suffix = OFFSETEXT;
+    char *buf;
     struct stat input_stat, search_stat;
-    int offset_file_exists;
-    offset_t offset_data;
-    glob_t glob_data;
-    ssize_t rd, wr;
-    off_t start;
     int res;
+    offset_t offset_data;
+
+    unsigned long page_size = sysconf(_SC_PAGESIZE);
+    unsigned long page_offset = page_size - 1;
+    unsigned long page_align  = ~ page_offset;
 
     if (argc < 2) {
         printf("arguments required:\n\t- path to file (required)\n\t- glob to search for rotated file (optional)\n");
         return 1;
     }
 
-    input_fn = argv[1];
-    offset_fn = malloc(strlen(input_fn) + OFFSETSZ);
-    strcpy(offset_fn, input_fn);
-    strcat(offset_fn, offset_suffix);
-
+    char * input_fn = argv[1];
     int input_fd = open(input_fn, O_RDONLY);
     FASSERT(input_fd, "file open")
 
     res = fstat(input_fd, &input_stat);
-    FASSERT(res, "file stat");
+    FASSERT(res, "file stat")
 
-    offset_file_exists = access(offset_fn, F_OK | R_OK | W_OK );
+    char offset_fn[strlen(input_fn) + sizeof(OFFSETEXT)];
+    strcpy(offset_fn, input_fn);
+    strcat(offset_fn, OFFSETEXT);
+
+    res = access(offset_fn, F_OK | R_OK | W_OK );
 
     int offset_fd = open(offset_fn, O_RDWR | O_CREAT);
-    FASSERT(offset_fd, "offset file open");
+    FASSERT(offset_fd, "offset file open")
 
-    if (offset_file_exists == 0) { // we found the ".offset" file
+    if (res == 0) { // we found the ".offset" file
 
         res = read(offset_fd, &offset_data, sizeof(offset_t));
-        FASSERT(res, "offset file read");
+        FASSERT(res, "offset file read")
 
         if (offset_data.offset == input_stat.st_size &&
             offset_data.inode == input_stat.st_ino) // no changes
                 return 0;
-
-        buf = malloc(BUFFERSIZE);
-        if (buf == NULL) {
-            perror("malloc");
-            return 1;
-        }
 
         if (offset_data.inode != input_stat.st_ino) { // file rotated
 
             if (argc == 3) { // we have glob to search for rotated file
 
                 int i, found = 0;
+                glob_t glob_data;
+
                 if (!glob(argv[2], GLOB_NOSORT, NULL, &glob_data))
                     for (i = 0; i < glob_data.gl_pathc && !found; i++)
                         if(!stat(glob_data.gl_pathv[i], &search_stat))
@@ -80,16 +75,22 @@ int main (int argc, char *argv[]) {
 
                     fprintf(stderr, "file rotated, found at %s\n", glob_data.gl_pathv[i - 1]);
 
+                    size_t tail_len = search_stat.st_size - offset_data.offset;
+                    size_t buf_size = (tail_len + page_offset) & page_align;
+
                     int globfd = open(glob_data.gl_pathv[i - 1], O_RDONLY);
-                    FASSERT(globfd, "found file open");
+                    FASSERT(globfd, "found file open")
 
-                    res = lseek(globfd, offset_data.offset, SEEK_SET);
-                    FASSERT(res, "found file lseek");
-
-                    while((rd = read(globfd, buf, BUFFERSIZE)) != 0) {
-                        FASSERT(rd, "found file read");
-                        wr = write(STDOUT_FILENO, buf, rd);
+                    buf = mmap(NULL, buf_size, PROT_READ, MAP_NOCACHE | MAP_PRIVATE, globfd, offset_data.offset & page_align);
+                    if (buf == MAP_FAILED) {
+                        perror("mmap file");
+                        return 1;
                     }
+
+                    write(STDOUT_FILENO, buf + (offset_data.offset & page_offset), tail_len);
+
+                    res = munmap(buf, buf_size);
+                    FASSERT(res, "unmap file")
 
                     close(globfd);
 
@@ -104,26 +105,40 @@ int main (int argc, char *argv[]) {
             offset_data.inode = input_stat.st_ino;
             offset_data.offset = 0;
 
-        } else {
+        } else { // file was not rotated
 
             if (offset_data.offset > input_stat.st_size ) {
                 fputs("warning, truncated file\n", stderr);
                 offset_data.offset = 0;
             }
-
-            start = lseek(input_fd, offset_data.offset, SEEK_SET);
-            FASSERT(start, "lseek");
         }
 
-        while((rd = read(input_fd, buf, BUFFERSIZE)) != 0 ) {
-            FASSERT(rd, "read");
-            wr = write(STDOUT_FILENO, buf, rd);
-            offset_data.offset += rd;
-        };
+        size_t buf_size = (input_stat.st_size - offset_data.offset + page_offset) & page_align;
+        buf = mmap(NULL, buf_size, PROT_READ, MAP_NOCACHE | MAP_PRIVATE, input_fd, offset_data.offset & page_align);
 
-        free(buf);
+        if (buf == MAP_FAILED) {
+            perror("cannot mmap file");
+            return 1;
+        }
 
-    } else {
+        char *line_end, *line_start = buf + (offset_data.offset & page_offset);
+
+        while (
+                (offset_data.offset < input_stat.st_size) && 
+                (line_end = memchr(line_start, '\n', input_stat.st_size - offset_data.offset))
+        ) {
+
+            size_t line_len = line_end - line_start + 1;
+            offset_data.offset += line_len;
+
+            write(STDOUT_FILENO, line_start, line_len);
+            line_start = line_end + 1;
+        }
+
+        res = munmap(buf, buf_size);
+        FASSERT(res, "unmap file")
+
+    } else { // no offset file
 
         offset_data.offset = input_stat.st_size;
         offset_data.inode = input_stat.st_ino;
