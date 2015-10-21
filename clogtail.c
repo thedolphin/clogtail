@@ -77,7 +77,8 @@ int main (int argc, char *argv[]) {
                     fprintf(stderr, "file rotated, found at %s\n", glob_data.gl_pathv[i - 1]);
 
                     size_t tail_len = search_stat.st_size - offset_data.offset;
-                    size_t buf_size = (tail_len + page_offset) & page_align;
+                    size_t buf_offset = offset_data.offset & page_offset;
+                    size_t buf_size = (tail_len + buf_offset + page_offset) & page_align;
 
                     int globfd = open(glob_data.gl_pathv[i - 1], O_RDONLY);
                     FASSERT(globfd, "found file open")
@@ -88,7 +89,7 @@ int main (int argc, char *argv[]) {
                         return 1;
                     }
 
-                    write(STDOUT_FILENO, buf + (offset_data.offset & page_offset), tail_len);
+                    write(STDOUT_FILENO, buf + buf_offset, tail_len);
 
                     res = munmap(buf, buf_size);
                     FASSERT(res, "unmap file")
@@ -114,7 +115,8 @@ int main (int argc, char *argv[]) {
             }
         }
 
-        size_t buf_size = (input_stat.st_size - offset_data.offset + page_offset) & page_align;
+        size_t buf_offset = offset_data.offset & page_offset;
+        size_t buf_size = (input_stat.st_size - offset_data.offset + buf_offset + page_offset) & page_align;
         buf = mmap(NULL, buf_size, PROT_READ, MAP_SHARED, input_fd, offset_data.offset & page_align);
 
         if (buf == MAP_FAILED) {
@@ -122,7 +124,7 @@ int main (int argc, char *argv[]) {
             return 1;
         }
 
-        char *line_end, *line_start = buf + (offset_data.offset & page_offset);
+        char *line_end, *line_start = buf + buf_offset;
 
         while (
                 (offset_data.offset < input_stat.st_size) && 
