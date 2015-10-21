@@ -18,16 +18,55 @@ typedef struct {
     ino_t inode;
 } offset_t;
 
+long page_size, page_offset, page_align;
+
+off_t logtail(int fd, off_t read_from, off_t read_to) {
+
+    if (read_to > 0) {
+
+        char *buf;
+
+        size_t buf_offset = read_from & page_offset;
+        size_t buf_size = (read_to - read_from + buf_offset + page_offset) & page_align;
+        buf = mmap(NULL, buf_size, PROT_READ, MAP_SHARED, fd, read_from & page_align);
+
+        if (buf == MAP_FAILED) {
+            perror("cannot mmap file");
+            return 1;
+        }
+
+        char *line_end, *line_start = buf + buf_offset;
+
+        while (
+                (read_from < read_to) && 
+                (line_end = memchr(line_start, '\n', read_to - read_from))
+        ) {
+
+            size_t line_len = line_end - line_start + 1;
+            read_from += line_len;
+
+            write(STDOUT_FILENO, line_start, line_len);
+            line_start = line_end + 1;
+        }
+
+        int res = munmap(buf, buf_size);
+        FASSERT(res, "unmap file")
+
+        return read_from;
+
+    } else
+
+        return 0;
+}
+
 int main (int argc, char *argv[]) {
 
-    char *buf;
-    struct stat input_stat;
-    int res;
     offset_t offset_data;
+    int res;
 
-    long page_size = sysconf(_SC_PAGESIZE);
-    long page_offset = page_size - 1;
-    long page_align  = ~ page_offset;
+    page_size = sysconf(_SC_PAGESIZE);
+    page_offset = page_size - 1;
+    page_align  = ~ page_offset;
 
     if (argc < 2) {
         printf("arguments required:\n\t- path to file (required)\n\t- glob to search for rotated file (optional)\n");
@@ -38,6 +77,7 @@ int main (int argc, char *argv[]) {
     int input_fd = open(input_fn, O_RDONLY);
     FASSERT(input_fd, "file open")
 
+    struct stat input_stat;
     res = fstat(input_fd, &input_stat);
     FASSERT(res, "file stat")
 
@@ -47,7 +87,7 @@ int main (int argc, char *argv[]) {
 
     res = access(offset_fn, F_OK | R_OK | W_OK );
 
-    int offset_fd = open(offset_fn, O_RDWR | O_CREAT);
+    int offset_fd = open(offset_fn, O_RDWR | O_CREAT, 0664);
     FASSERT(offset_fd, "offset file open")
 
     if (res == 0) { // we found the ".offset" file
@@ -73,26 +113,12 @@ int main (int argc, char *argv[]) {
                             found = (search_stat.st_ino == offset_data.inode);
 
                 if (found) {
-
                     fprintf(stderr, "file rotated, found at %s\n", glob_data.gl_pathv[i - 1]);
-
-                    size_t tail_len = search_stat.st_size - offset_data.offset;
-                    size_t buf_offset = offset_data.offset & page_offset;
-                    size_t buf_size = (tail_len + buf_offset + page_offset) & page_align;
 
                     int globfd = open(glob_data.gl_pathv[i - 1], O_RDONLY);
                     FASSERT(globfd, "found file open")
 
-                    buf = mmap(NULL, buf_size, PROT_READ, MAP_SHARED, globfd, offset_data.offset & page_align);
-                    if (buf == MAP_FAILED) {
-                        perror("mmap file");
-                        return 1;
-                    }
-
-                    write(STDOUT_FILENO, buf + buf_offset, tail_len);
-
-                    res = munmap(buf, buf_size);
-                    FASSERT(res, "unmap file")
+                    logtail(globfd, offset_data.offset, search_stat.st_size);
 
                     close(globfd);
 
@@ -115,31 +141,7 @@ int main (int argc, char *argv[]) {
             }
         }
 
-        size_t buf_offset = offset_data.offset & page_offset;
-        size_t buf_size = (input_stat.st_size - offset_data.offset + buf_offset + page_offset) & page_align;
-        buf = mmap(NULL, buf_size, PROT_READ, MAP_SHARED, input_fd, offset_data.offset & page_align);
-
-        if (buf == MAP_FAILED) {
-            perror("cannot mmap file");
-            return 1;
-        }
-
-        char *line_end, *line_start = buf + buf_offset;
-
-        while (
-                (offset_data.offset < input_stat.st_size) && 
-                (line_end = memchr(line_start, '\n', input_stat.st_size - offset_data.offset))
-        ) {
-
-            size_t line_len = line_end - line_start + 1;
-            offset_data.offset += line_len;
-
-            write(STDOUT_FILENO, line_start, line_len);
-            line_start = line_end + 1;
-        }
-
-        res = munmap(buf, buf_size);
-        FASSERT(res, "unmap file")
+        offset_data.offset = logtail(input_fd, offset_data.offset, input_stat.st_size);
 
     } else { // no offset file
 
