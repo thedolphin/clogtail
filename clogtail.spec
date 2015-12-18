@@ -1,7 +1,7 @@
 %define source_repo https://github.com/thedolphin/clogtail.git
 
 Name:           clogtail
-Version:        0.2.1
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        log follower for periodic jobs
 Group:          Applications/File
@@ -28,5 +28,11 @@ rm -rf $RPM_BUILD_ROOT
 /usr/bin/clogtail
 
 %changelog
+* Fri Dec 18 2015 Alexander Rumyantsev <arum@1c.ru>
+- switched to getopt
+
+* Tue Oct 20 2015 Alexander Rumyantsev <arum@1c.ru>
+- switched to mmap
+
 * Thu Mar 26 2015 Alexander Rumyantsev <arum@1c.ru>
 - Initial release
