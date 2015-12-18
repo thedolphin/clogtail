@@ -1,5 +1,4 @@
-
-simple and fast log tailer in pure c
+simple zero-copy and extremely fast log tailer in pure c
 
 first time it remembers file size as offset and produces no output
 
@@ -7,6 +6,9 @@ every next time it prints all data from last offset to the last End-Of-Line
 
 if file was rotated (recreated) it tries to search by specified glob for previous file and dumps it from last known offset to the end, then dumps new file.
 
-Usage:
+usage:
+    clogtail [options]
 
-clogtail <filename> [glob]
+        -f <file>      path to file (required)
+        -o <suffix>    offset file suffix (optional)
+        -g <glob>      glob to use for searching for rotated file
