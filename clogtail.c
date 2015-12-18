@@ -59,6 +59,17 @@ off_t logtail(int fd, off_t read_from, off_t read_to) {
         return 0;
 }
 
+void usage() {
+    printf(
+        "usage:\n"
+        "\tclogtail [options]\n\n"
+        "\t\t-f <file>      path to file (required)\n"
+        "\t\t-o <suffix>    offset file suffix (optional)\n"
+        "\t\t-g <glob>      glob to use for searching for rotated file (optional)\n\n"
+    );
+    exit(0);
+}
+
 int main (int argc, char *argv[]) {
 
     offset_t offset_data;
@@ -68,12 +79,21 @@ int main (int argc, char *argv[]) {
     page_offset = page_size - 1;
     page_align  = ~ page_offset;
 
-    if (argc < 2) {
-        printf("arguments required:\n\t- path to file (required)\n\t- glob to search for rotated file (optional)\n");
-        return 1;
+    char *input_fn = NULL;
+    char *offset_sfx = NULL;
+    char *glob_str = NULL;
+
+    int opt;
+    while ((opt = getopt(argc, argv, "f:o:g:")) != -1) {
+        switch (opt) {
+            case 'f': input_fn   = optarg; break;
+            case 'o': offset_sfx = optarg; break;
+            case 'g': glob_str   = optarg; break;
+        }
     }
 
-    char * input_fn = argv[1];
+    if (input_fn == NULL) usage();
+
     int input_fd = open(input_fn, O_RDONLY);
     FASSERT(input_fd, "file open")
 
@@ -81,9 +101,9 @@ int main (int argc, char *argv[]) {
     res = fstat(input_fd, &input_stat);
     FASSERT(res, "file stat")
 
-    char offset_fn[strlen(input_fn) + sizeof(OFFSETEXT)];
+    char offset_fn[strlen(input_fn) + (offset_sfx ? strlen(offset_sfx) : sizeof(OFFSETEXT))];
     strcpy(offset_fn, input_fn);
-    strcat(offset_fn, OFFSETEXT);
+    strcat(offset_fn, offset_sfx ? offset_sfx : OFFSETEXT);
 
     res = access(offset_fn, F_OK | R_OK | W_OK );
 
@@ -101,13 +121,13 @@ int main (int argc, char *argv[]) {
 
         if (offset_data.inode != input_stat.st_ino) { // file rotated
 
-            if (argc == 3) { // we have glob to search for rotated file
+            if (glob_str) { // we have glob to search for rotated file
 
                 int i, found = 0;
                 glob_t glob_data;
                 struct stat search_stat;
 
-                if (!glob(argv[2], GLOB_NOSORT, NULL, &glob_data))
+                if (!glob(glob_str, GLOB_NOSORT, NULL, &glob_data))
                     for (i = 0; i < glob_data.gl_pathc && !found; i++)
                         if(!stat(glob_data.gl_pathv[i], &search_stat))
                             found = (search_stat.st_ino == offset_data.inode);
