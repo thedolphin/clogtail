@@ -11,7 +11,7 @@
 
 #define OFFSETEXT ".offset"
 
-#define FASSERT(x, y) if ((x) == -1) { perror((y)); return 1; }
+#define FASSERT(x, y) if ((x) == -1) { perror((y)); exit(1); }
 
 typedef struct {
     off_t offset;

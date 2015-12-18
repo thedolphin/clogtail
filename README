@@ -11,4 +11,4 @@ usage:
 
         -f <file>      path to file (required)
         -o <suffix>    offset file suffix (optional)
-        -g <glob>      glob to use for searching for rotated file
+        -g <glob>      glob to use for searching for rotated file (optional)
