@@ -1,8 +1,6 @@
-%define source_repo https://github.com/thedolphin/clogtail.git
-
 Name:           clogtail
 Version:        0.3.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        log follower for periodic jobs
 Group:          Applications/File
 License:        BSD
@@ -13,7 +11,8 @@ Log follower for periodic jobs
 
 %prep
 %setup -c -T
-git clone %{source_repo} .
+curl -fL https://api.github.com/repos/thedolphin/clogtail/tarball/master |
+tar -xzvf - --strip 1
 
 %build
 make
