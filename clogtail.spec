@@ -1,18 +1,17 @@
 Name:           clogtail
 Version:        0.3.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        log follower for periodic jobs
 Group:          Applications/File
 License:        BSD
-BuildRequires:  git gcc
+BuildRequires:  git gcc make
+Source0:        https://github.com/thedolphin/clogtail/archive/%{version}.tar.gz
 
 %description
 Log follower for periodic jobs
 
 %prep
-%setup -c -T
-curl -fL https://api.github.com/repos/thedolphin/clogtail/tarball/master |
-tar -xzvf - --strip 1
+%setup
 
 %build
 make
